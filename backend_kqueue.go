@@ -575,6 +575,11 @@ func (w *kqueue) watchDirectoryFiles(dirPath string) error {
 
 		fi, err := f.Info()
 		if err != nil {
+			// Deleted since ReadDir: nothing to watch. The deletion also
+			// triggers a dirChange for the directory.
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
 			return fmt.Errorf("%q: %w", path, err)
 		}
 

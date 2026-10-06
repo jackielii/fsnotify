@@ -8,6 +8,7 @@ package fsnotify
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -104,4 +105,42 @@ func TestRemoveState(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(0, 0)
+}
+
+// A file deleted between ReadDir and Info in watchDirectoryFiles, as when a
+// build tool empties its output directory, must not fail Add.
+func TestWatchDirectoryFilesVanished(t *testing.T) {
+	tmp := t.TempDir()
+	for i := range 500 {
+		if err := os.WriteFile(join(tmp, fmt.Sprintf("f%d", i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 500 {
+			_ = os.Remove(join(tmp, fmt.Sprintf("f%d", i)))
+		}
+	}()
+
+	w, err := NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	for {
+		if err := w.Add(tmp); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-done:
+			return
+		default:
+		}
+		if err := w.Remove(tmp); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
